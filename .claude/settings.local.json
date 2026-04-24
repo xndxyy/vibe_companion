@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf build)",
+      "Bash(flutter build *)",
+      "Bash(node)",
+      "Bash(flutter analyze *)",
+      "Bash(node -e ' *)",
+      "Bash(node insert_settings_panel.js)",
+      "Bash(node perf_all.js)",
+      "Bash(sed -n '1784,1796p' lib/main.dart)",
+      "Bash(sed -n '1651,1665p' lib/main.dart)",
+      "Bash(node fix2.js)",
+      "Bash(D:/Flutter_SDK/flutter/bin/flutter analyze *)"
+    ]
+  }
+}
