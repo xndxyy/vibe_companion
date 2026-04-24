@@ -20,6 +20,9 @@ class StorageService {
   static const String _keyAutoReplyEnabled = 'auto_reply_enabled';
   static const String _keyAutoReplyMinutes = 'auto_reply_minutes';
   static const String _keyFirstLaunch = 'first_launch';
+  static const String _keyCustomApiUrl = 'custom_api_url';
+  static const String _keyCustomModel = 'custom_model';
+  static const String _keyHiddenCharIds = 'hidden_char_ids';
 
   SharedPreferences? _prefs;
 
@@ -109,13 +112,31 @@ class StorageService {
   int getAutoReplyMinutes() => prefs.getInt(_keyAutoReplyMinutes) ?? 10;
   Future<void> setAutoReplyMinutes(int v) async => await prefs.setInt(_keyAutoReplyMinutes, v);
 
+  // Custom API
+  String getCustomApiUrl() => prefs.getString(_keyCustomApiUrl) ?? '';
+  Future<void> setCustomApiUrl(String v) async => await prefs.setString(_keyCustomApiUrl, v);
+  String getCustomModel() => prefs.getString(_keyCustomModel) ?? '';
+  Future<void> setCustomModel(String v) async => await prefs.setString(_keyCustomModel, v);
+
+  // Hidden characters
+  List<String> getHiddenCharIds() {
+    final json = prefs.getString(_keyHiddenCharIds) ?? '[]';
+    try {
+      return List<String>.from(jsonDecode(json));
+    } catch (_) {
+      return [];
+    }
+  }
+  Future<void> setHiddenCharIds(List<String> ids) async =>
+      await prefs.setString(_keyHiddenCharIds, jsonEncode(ids));
+
   // One-click reset
   Future<void> resetAll() async {
     final keys = [
       _keyApi, _keyApiProvider, _keyCharacterId, _keyConversationName,
       _keyCompanionName, _keyPersonality, _keyChatHistory, _keyUserAvatar,
       _keyCompanionAvatar, _keyBackground, _keyAutoReplyEnabled,
-      _keyAutoReplyMinutes,
+      _keyAutoReplyMinutes, _keyCustomApiUrl, _keyCustomModel, _keyHiddenCharIds,
     ];
     for (final key in keys) {
       await prefs.remove(key);

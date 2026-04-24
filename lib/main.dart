@@ -259,6 +259,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _testMessage;
 
   int _userGender = -1;
+  Set<String> _hiddenCharIds = {};
 
   @override
   void initState() {
@@ -266,7 +267,10 @@ class _SetupScreenState extends State<SetupScreen> {
     _userGender = StorageService().getUserGender();
     _apiKeyController.text = StorageService().getApiKey();
     _apiProvider = StorageService().getApiProvider();
-    _selectedCharId = StorageService().getCharacterId();
+    _selectedCharId = StorageService().getCharacterId().isNotEmpty ? StorageService().getCharacterId() : null;
+    _apiUrlController.text = StorageService().getCustomApiUrl();
+    _customModelController.text = StorageService().getCustomModel();
+    _hiddenCharIds = StorageService().getHiddenCharIds().toSet();
   }
 
   @override
@@ -278,8 +282,10 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   List<Character> get _filteredChars {
-    if (_viewMode == 2) return [...femaleCompanions, ...maleCompanions, psychologist];
-    return _userGender == 1 ? maleCompanions : femaleCompanions;
+    final all = _viewMode == 2
+        ? [...femaleCompanions, ...maleCompanions, psychologist]
+        : _userGender == 1 ? maleCompanions : femaleCompanions;
+    return all.where((c) => !_hiddenCharIds.contains(c.id)).toList();
   }
 
   Future<void> _testApi() async {
@@ -334,6 +340,8 @@ class _SetupScreenState extends State<SetupScreen> {
     await StorageService().setApiKey(_apiKeyController.text.trim());
     await StorageService().setApiProvider(_apiProvider);
     await StorageService().setCharacterId(_selectedCharId!);
+    await StorageService().setCustomApiUrl(_apiUrlController.text.trim());
+    await StorageService().setCustomModel(_customModelController.text.trim());
 
     final char = allCharacters.firstWhere((c) => c.id == _selectedCharId);
     await StorageService().setCompanionName(char.name);
@@ -497,6 +505,19 @@ class _SetupScreenState extends State<SetupScreen> {
           character: char,
           isSelected: _selectedCharId == char.id,
           onTap: () => setState(() => _selectedCharId = char.id),
+          onLongPress: () {
+            setState(() => _hiddenCharIds.add(char.id));
+            StorageService().setHiddenCharIds(_hiddenCharIds.toList());
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('已隐藏 ${char.name}'),
+                action: SnackBarAction(label: '撤销', onPressed: () {
+                  setState(() => _hiddenCharIds.remove(char.id));
+                  StorageService().setHiddenCharIds(_hiddenCharIds.toList());
+                }),
+              ),
+            );
+          },
         );
       },
     );
@@ -648,7 +669,12 @@ class _SetupScreenState extends State<SetupScreen> {
             title: '心理医生',
             subtitle: '专业心理咨询师，帮助你理清情绪',
             color: const Color(0xFF34D399),
-            onTap: () => setState(() { _selectedCharId = psychologist.id; }),
+            onTap: () {
+              setState(() { _selectedCharId = psychologist.id; _viewMode = 0; });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已选择心理医生，点击底部按钮开始对话')),
+              );
+            },
           ),
           const SizedBox(height: 12),
 
@@ -665,9 +691,9 @@ class _SetupScreenState extends State<SetupScreen> {
           _buildSectionCard(
             icon: Icons.people,
             title: '角色列表',
-            subtitle: '共 ${allCharacters.length} 个角色 (女${femaleCompanions.length} + 男${maleCompanions.length} + 医生1)',
+            subtitle: '共 ${allCharacters.length} 个角色 (已隐藏 ${_hiddenCharIds.length} 个)',
             color: const Color(0xFF8B5CF6),
-            onTap: () {},
+            onTap: _showCharacterListDialog,
           ),
         ],
       ),
@@ -712,6 +738,80 @@ class _SetupScreenState extends State<SetupScreen> {
               Icon(Icons.chevron_right, color: isDestructive ? Colors.redAccent : Colors.white30),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showCharacterListDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.85,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (_, scrollCtrl) => StatefulBuilder(
+          builder: (ctx2, setSheetState) {
+            final all = [...femaleCompanions, ...maleCompanions, psychologist];
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Row(
+                    children: [
+                      const Text('角色管理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      if (_hiddenCharIds.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {});
+                            setState(() => _hiddenCharIds.clear());
+                            StorageService().setHiddenCharIds([]);
+                          },
+                          child: const Text('全部恢复', style: TextStyle(color: Color(0xFFec4899), fontSize: 13)),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: all.length,
+                    itemBuilder: (_, i) {
+                      final c = all[i];
+                      final hidden = _hiddenCharIds.contains(c.id);
+                      return ListTile(
+                        leading: Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(colors: [c.themeColor, c.themeColor.withValues(alpha: 0.6)]),
+                          ),
+                          child: Icon(c.icon, color: Colors.white, size: 20),
+                        ),
+                        title: Text(c.name, style: TextStyle(color: hidden ? Colors.white38 : Colors.white)),
+                        subtitle: Text(c.typeName, style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                        trailing: IconButton(
+                          icon: Icon(hidden ? Icons.visibility_off : Icons.visibility, color: hidden ? Colors.white38 : const Color(0xFF34D399)),
+                          onPressed: () {
+                            setState(() {
+                              if (hidden) { _hiddenCharIds.remove(c.id); } else { _hiddenCharIds.add(c.id); }
+                            });
+                            setSheetState(() {});
+                            StorageService().setHiddenCharIds(_hiddenCharIds.toList());
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -776,13 +876,15 @@ class _CharacterCard extends StatelessWidget {
   final Character character;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
-  const _CharacterCard({required this.character, required this.isSelected, required this.onTap});
+  const _CharacterCard({required this.character, required this.isSelected, required this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(14),
@@ -902,6 +1004,8 @@ final Map<String, List<String>> _emojiFiles = {};
     _messages = msgs;
     _apiProvider = _storage.getApiProvider();
     _apiKeyController.text = _storage.getApiKey();
+    _apiUrlController.text = _storage.getCustomApiUrl();
+    _customModelController.text = _storage.getCustomModel();
     _conversationName = _storage.getConversationName();
     _nameController.text = _storage.getCompanionName();
     _personalityController.text = _storage.getPersonality();
@@ -1247,6 +1351,8 @@ void _sendEmoji(String key) {
   Future<void> _saveSettings() async {
     await _storage.setApiKey(_apiKeyController.text.trim());
     await _storage.setApiProvider(_apiProvider);
+    await _storage.setCustomApiUrl(_apiUrlController.text.trim());
+    await _storage.setCustomModel(_customModelController.text.trim());
     await _storage.setConversationName(_conversationName);
     await _storage.setCompanionName(_nameController.text.trim());
     await _storage.setPersonality(_personalityController.text.trim());
@@ -1528,6 +1634,36 @@ Widget _buildSettingsPanel() {
                       style: const TextStyle(fontSize: 14, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: '输入 API Key',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: const Color(0xFF252540),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('自定义 API 地址', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _apiUrlController,
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'https://api.example.com/v1/chat/completions',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: const Color(0xFF252540),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('自定义模型名', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _customModelController,
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: '如 gpt-4o, claude-3-sonnet...',
                         hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: const Color(0xFF252540),
