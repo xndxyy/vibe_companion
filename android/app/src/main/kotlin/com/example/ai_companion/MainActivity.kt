@@ -1,4 +1,4 @@
-package com.example.vibe_companion
+package com.example.ai_companion
 
 import io.flutter.embedding.android.FlutterActivity
 

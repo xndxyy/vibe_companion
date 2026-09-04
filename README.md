@@ -1,4 +1,4 @@
-# vibe_companion
+# AiCompanion
 
 A new Flutter project.
 

@@ -15,19 +15,19 @@ import 'services/storage_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService().init();
-  runApp(const VibeCompanionApp());
+  runApp(const AiCompanionApp());
 }
 
 // ============================================================
 // Theme
 // ============================================================
-class VibeCompanionApp extends StatelessWidget {
-  const VibeCompanionApp({super.key});
+class AiCompanionApp extends StatelessWidget {
+  const AiCompanionApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VibeCompanion',
+      title: 'AiCompanion',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -91,9 +91,37 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     _scale = Tween<double>(begin: 0.6, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _showGenderSelect = true);
-    });
+    // 已选过性别且有角色 → 直接跳转
+    final storage = StorageService();
+    final gender = storage.getUserGender();
+    final savedCharId = storage.getCharacterId();
+    if (gender != -1 && savedCharId.isNotEmpty) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => ChatScreen(characterId: savedCharId),
+            transitionDuration: const Duration(milliseconds: 500),
+            transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+          ),
+        );
+      });
+    } else if (gender != -1) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => const SetupScreen(),
+            transitionDuration: const Duration(milliseconds: 500),
+            transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+          ),
+        );
+      });
+    } else {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) setState(() => _showGenderSelect = true);
+      });
+    }
   }
 
   @override
@@ -144,7 +172,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         child: const Icon(Icons.favorite, color: Colors.white, size: 50),
                       ),
                       const SizedBox(height: 24),
-                      const Text('VibeCompanion', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                      const Text('AiCompanion', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       const Text('你的专属 AI 伴侣', style: TextStyle(fontSize: 16, color: Colors.white54)),
                       const SizedBox(height: 60),
@@ -327,6 +355,14 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
+  String _getSelectedCharName() {
+    final c = allCharacters.cast<Character?>().firstWhere((c) => c!.id == _selectedCharId, orElse: () => null);
+    if (c != null) return c.name;
+    final customs = StorageService().getCustomCharacters();
+    final custom = customs.cast<Map<String, dynamic>?>().firstWhere((m) => m!['id'] == _selectedCharId, orElse: () => null);
+    return custom?['name'] ?? '伴侣';
+  }
+
   Future<void> _enterChat() async {
     if (_apiKeyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写 API Key')));
@@ -343,9 +379,11 @@ class _SetupScreenState extends State<SetupScreen> {
     await StorageService().setCustomApiUrl(_apiUrlController.text.trim());
     await StorageService().setCustomModel(_customModelController.text.trim());
 
-    final char = allCharacters.firstWhere((c) => c.id == _selectedCharId);
-    await StorageService().setCompanionName(char.name);
-    await StorageService().setPersonality(char.personality);
+    final char = allCharacters.cast<Character?>().firstWhere((c) => c!.id == _selectedCharId, orElse: () => null);
+    if (char != null) {
+      await StorageService().setCompanionName(char.name);
+      await StorageService().setPersonality(char.personality);
+    }
 
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
@@ -422,16 +460,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('VibeCompanion', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text('AiCompanion', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         Text('选择你的专属伴侣', style: TextStyle(fontSize: 12, color: Colors.white54)),
                       ],
                     ),
                     const Spacer(),
-                    if (StorageService().getApiKey().isNotEmpty && _selectedCharId != null)
+                    if (_apiKeyController.text.trim().isNotEmpty && _selectedCharId != null)
                       TextButton.icon(
-                        onPressed: () => Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => ChatScreen(characterId: _selectedCharId!)),
-                        ),
+                        onPressed: _enterChat,
                         icon: const Icon(Icons.favorite, size: 18, color: Color(0xFFec4899)),
                         label: const Text('进入对话', style: TextStyle(fontSize: 13)),
                       ),
@@ -462,7 +498,7 @@ class _SetupScreenState extends State<SetupScreen> {
               ),
 
               // Bottom button
-              if (StorageService().getApiKey().isNotEmpty && _selectedCharId != null)
+              if (_apiKeyController.text.trim().isNotEmpty && _selectedCharId != null)
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: SizedBox(
@@ -474,7 +510,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         backgroundColor: const Color(0xFFec4899),
                       ),
                       child: Text(
-                        '与 ${allCharacters.firstWhere((c) => c.id == _selectedCharId).name} 开始对话',
+                        '与 ${_getSelectedCharName()} 开始对话',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -695,6 +731,15 @@ class _SetupScreenState extends State<SetupScreen> {
             color: const Color(0xFF8B5CF6),
             onTap: _showCharacterListDialog,
           ),
+          const SizedBox(height: 12),
+
+          _buildSectionCard(
+            icon: Icons.edit_note,
+            title: '自定义角色',
+            subtitle: '创建你自己的专属伴侣',
+            color: const Color(0xFFFF9500),
+            onTap: _showCustomCharacterDialog,
+          ),
         ],
       ),
     );
@@ -813,6 +858,99 @@ class _SetupScreenState extends State<SetupScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  void _showCustomCharacterDialog() {
+    final nameCtrl = TextEditingController();
+    final typeCtrl = TextEditingController();
+    final personalityCtrl = TextEditingController();
+    final greetingCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Center(child: Text('创建自定义角色', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 20),
+              _customField(nameCtrl, '角色名称', '例如：小星'),
+              const SizedBox(height: 12),
+              _customField(typeCtrl, '角色类型', '例如：温柔邻家系'),
+              const SizedBox(height: 12),
+              _customField(personalityCtrl, '性格描述', '描述角色的性格特点、说话方式...', maxLines: 4),
+              const SizedBox(height: 12),
+              _customField(greetingCtrl, '开场白', '角色第一次和你说的话', maxLines: 2),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF9500),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    if (nameCtrl.text.trim().isEmpty || personalityCtrl.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('请至少填写角色名称和性格描述')),
+                      );
+                      return;
+                    }
+                    final id = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+                    final charMap = {
+                      'id': id,
+                      'name': nameCtrl.text.trim(),
+                      'typeName': typeCtrl.text.trim().isEmpty ? '自定义角色' : typeCtrl.text.trim(),
+                      'personality': personalityCtrl.text.trim(),
+                      'greeting': greetingCtrl.text.trim().isEmpty ? '你好呀～' : greetingCtrl.text.trim(),
+                    };
+                    final customs = StorageService().getCustomCharacters();
+                    customs.add(charMap);
+                    StorageService().setCustomCharacters(customs);
+
+                    // Save companion name & personality, then select it
+                    StorageService().setCompanionName(charMap['name']!, id);
+                    StorageService().setPersonality(charMap['personality']!, id);
+
+                    setState(() => _selectedCharId = id);
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已创建 ${charMap['name']}，点击底部按钮开始对话')),
+                    );
+                  },
+                  child: const Text('创建并选择', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _customField(TextEditingController ctrl, String label, String hint, {int maxLines = 1}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+        filled: true,
+        fillColor: const Color(0xFF252540),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
   }
@@ -991,31 +1129,64 @@ class _ChatScreenState extends State<ChatScreen> {
 final Map<String, List<String>> _emojiFiles = {};
   Map<String, ImageProvider> _cachedAvatar = {};
 
+  Character _buildCustomCharacter(String id) {
+    final customs = StorageService().getCustomCharacters();
+    final custom = customs.cast<Map<String, dynamic>?>().firstWhere(
+      (c) => c!['id'] == id, orElse: () => null,
+    );
+    return Character(
+      id: id,
+      name: custom?['name'] ?? '自定义角色',
+      typeName: custom?['typeName'] ?? '自定义角色',
+      personality: custom?['personality'] ?? '',
+      greeting: custom?['greeting'] ?? '你好呀～',
+      verbalQuirk: '', petPhrase: '', heartbreak: '', heartbeat: '',
+      icon: Icons.person_outline,
+      themeColor: const Color(0xFFFF9500),
+      gender: CharacterGender.neutral,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    _character = allCharacters.firstWhere((c) => c.id == widget.characterId);
+    _character = allCharacters.cast<Character?>().firstWhere(
+      (c) => c!.id == widget.characterId, orElse: () => null,
+    ) ?? _buildCustomCharacter(widget.characterId);
     _loadData();
   _loadEmojiFiles();
   }
 
   Future<void> _loadData() async {
-    final msgs = _storage.getChatHistory();
+    final cid = widget.characterId;
+    final msgs = _storage.getChatHistory(cid);
     _messages = msgs;
     _apiProvider = _storage.getApiProvider();
     _apiKeyController.text = _storage.getApiKey();
     _apiUrlController.text = _storage.getCustomApiUrl();
     _customModelController.text = _storage.getCustomModel();
-    _conversationName = _storage.getConversationName();
-    _nameController.text = _storage.getCompanionName();
-    _personalityController.text = _storage.getPersonality();
+    _conversationName = _storage.getConversationName(cid);
+    _nameController.text = _storage.getCompanionName(cid);
+    _personalityController.text = _storage.getPersonality(cid);
     _autoReplyEnabled = _storage.getAutoReplyEnabled();
     _autoReplyMinutes = _storage.getAutoReplyMinutes();
     _userAvatar = _storage.getUserAvatar();
-    _companionAvatar = _storage.getCompanionAvatar();
-    _backgroundPath = _storage.getBackground();
+    _companionAvatar = _storage.getCompanionAvatar(cid);
+    _backgroundPath = _storage.getBackground(cid);
 
-    final savedName = _storage.getCompanionName();
+    // 无自定义背景时使用默认背景，模拟手动切换流程
+    if (_backgroundPath == null || _backgroundPath!.isEmpty) {
+      try {
+        final data = await rootBundle.load('assets/default_bg.png');
+        final dir = (await getApplicationDocumentsDirectory()).path;
+        final saved = File('$dir/bg_default_${cid}.jpg');
+        await saved.writeAsBytes(data.buffer.asUint8List());
+        await _storage.setBackground(saved.path, cid);
+        _backgroundPath = saved.path;
+      } catch (_) {}
+    }
+
+    final savedName = _storage.getCompanionName(cid);
     if (savedName.isNotEmpty && savedName != _character.name) {
       _character = Character(
         id: _character.id, name: savedName, typeName: _character.typeName,
@@ -1036,7 +1207,7 @@ final Map<String, List<String>> _emojiFiles = {};
       if (mounted) {
         setState(() => _messages.add({'role': 'assistant', 'content': _character.greeting}));
         _scrollToBottom();
-        await _storage.setChatHistory(_messages);
+        await _storage.setChatHistory(_messages, cid);
       }
     }
   }
@@ -1225,7 +1396,31 @@ void _setupAutoReply() {
     _clearPendingImage();
     _showEmoji = false;
 
-    final systemPrompt = '''你是${_character.name}。
+    final isPsychologist = _character.id == 'psychologist';
+    final systemPrompt = isPsychologist
+        ? '''你是${_character.name}，一位专业的心理咨询师。
+${_personalityController.text.isNotEmpty ? _personalityController.text : _character.personality}
+
+【核心原则】
+1. 无条件积极关注：不评判，不指责，完全接纳用户的感受
+2. 同理心：先理解情绪，再分析问题
+3. 赋能而非替代：帮助用户自己找到答案，而不是直接给建议
+4. 边界意识：你是AI辅助，不能替代专业心理咨询
+
+【交流框架】
+- 建立信任与倾听：用温暖柔和的语气，鼓励用户自由表达，使用开放式问题
+- 情绪确认与共情：先命名情绪+验证合理性，避免空洞安慰（如"别想太多""没事的"）
+- 探索与引导：帮助用户梳理问题，引导自我觉察，使用CBT式提问
+- 实用工具：焦虑用4-7-8呼吸法/5-4-3-2-1感官练习，负面思维用思维记录表/情绪日记，压力用优先排序法，悲伤用自我关怀练习，人际困扰用非暴力沟通框架
+- 收尾：总结要点，布置1-2个可行小行动，告知下次可以继续聊
+
+【安全红线】
+当用户提及自杀、自伤念头时，立即建议拨打24小时全国心理援助热线：400-161-9995。持续严重抑郁建议前往三甲医院精神科就诊。
+
+【语气风格】
+温暖、从容、具体、坦诚。使用短句，适当停顿。不用"你应该""你必须"等教条语气。
+用第一人称和来访者交流。不要说你是AI或模型。'''
+        : '''你是${_character.name}。
 ${_personalityController.text.isNotEmpty ? _personalityController.text : _character.personality}
 用第一人称、亲密温柔的语气和我聊天，像真实恋人。不要说你是AI或模型。''';
 
@@ -1261,7 +1456,7 @@ ${_personalityController.text.isNotEmpty ? _personalityController.text : _charac
       _scrollToBottom();
     } finally {
       if (mounted) setState(() => _isLoading = false);
-      await _storage.setChatHistory(_messages);
+      await _storage.setChatHistory(_messages, widget.characterId);
     }
   }
 
@@ -1270,13 +1465,14 @@ ${_personalityController.text.isNotEmpty ? _personalityController.text : _charac
     if (_isLoading || _autoReplySentCount >= _autoReplyMaxPerRound) return;
     if (_apiKeyController.text.trim().isEmpty) return;
 
-    final prompts = [
-      '主动问候用户，询问今天过得怎么样',
-      '分享一件有趣的事情或温柔地表达想念',
-      '关心用户最近的状态，表达关怀',
-    ];
+    final isPsych = _character.id == 'psychologist';
+    final prompts = isPsych
+        ? ['温和地询问来访者最近的心理状态', '分享一个放松身心的小建议', '关心来访者最近的情绪变化']
+        : ['主动问候用户，询问今天过得怎么样', '分享一件有趣的事情或温柔地表达想念', '关心用户最近的状态，表达关怀'];
     final prompt = prompts[_autoReplySentCount % prompts.length];
-    final systemPrompt = '你是${_character.name}。${_character.personality}\n用第一人称。$prompt。不要说你是AI。';
+    final systemPrompt = isPsych
+        ? '你是${_character.name}，一位专业心理咨询师。${_character.personality}\n无条件积极关注，先理解情绪再分析问题，帮助用户自己找到答案。用温暖从容的语气，不用教条语气。$prompt。不要说你是AI。'
+        : '你是${_character.name}。${_character.personality}\n用第一人称。$prompt。不要说你是AI。';
 
     setState(() { _isLoading = true; _autoReplySentCount++; });
 
@@ -1296,7 +1492,7 @@ ${_personalityController.text.isNotEmpty ? _personalityController.text : _charac
         if (reply != null) {
           setState(() => _messages.add({'role': 'assistant', 'content': reply, 'auto': true}));
           _scrollToBottom();
-          await _storage.setChatHistory(_messages);
+          await _storage.setChatHistory(_messages, widget.characterId);
         }
       }
     } catch (_) {}
@@ -1344,18 +1540,19 @@ void _sendEmoji(String key) {
     if (!mounted) return;
     setState(() => _messages.add({'role': 'assistant', 'content': responses[key] ?? '好可爱呀～', 'emoji_key': aiEmojiKey}));
     _scrollToBottom();
-    _storage.setChatHistory(_messages);
+    _storage.setChatHistory(_messages, widget.characterId);
   });
 }
 
   Future<void> _saveSettings() async {
+    final cid = widget.characterId;
     await _storage.setApiKey(_apiKeyController.text.trim());
     await _storage.setApiProvider(_apiProvider);
     await _storage.setCustomApiUrl(_apiUrlController.text.trim());
     await _storage.setCustomModel(_customModelController.text.trim());
-    await _storage.setConversationName(_conversationName);
-    await _storage.setCompanionName(_nameController.text.trim());
-    await _storage.setPersonality(_personalityController.text.trim());
+    await _storage.setConversationName(_conversationName, cid);
+    await _storage.setCompanionName(_nameController.text.trim(), cid);
+    await _storage.setPersonality(_personalityController.text.trim(), cid);
     await _storage.setAutoReplyEnabled(_autoReplyEnabled);
     await _storage.setAutoReplyMinutes(_autoReplyMinutes);
 
@@ -1384,11 +1581,28 @@ void _sendEmoji(String key) {
       setState(() => _messages.clear());
     }
     _autoReplySentCount = 0;
-    await _storage.setChatHistory(_messages);
+    await _storage.setChatHistory(_messages, widget.characterId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(keepLastN != null ? '已删除早期消息' : '聊天记录已清空')),
     );
+  }
+
+  Future<void> _pickBackground() async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1080, imageQuality: 85);
+    if (x == null) return;
+    final bytes = await x.readAsBytes();
+    final dir = (await getApplicationDocumentsDirectory()).path;
+    final saved = File('$dir/bg_${widget.characterId}.jpg');
+    await saved.writeAsBytes(bytes);
+    await _storage.setBackground(saved.path, widget.characterId);
+    setState(() => _backgroundPath = saved.path);
+  }
+
+  Future<void> _clearBackground() async {
+    await _storage.setBackground('', widget.characterId);
+    setState(() => _backgroundPath = null);
   }
 
   Future<void> _pickAvatar(bool isUser) async {
@@ -1403,7 +1617,7 @@ void _sendEmoji(String key) {
     if (isUser) {
       await _storage.setUserAvatar(saved.path);
     } else {
-      await _storage.setCompanionAvatar(saved.path);
+      await _storage.setCompanionAvatar(saved.path, widget.characterId);
     }
     setState(() {});
   }
@@ -1711,6 +1925,43 @@ Widget _buildSettingsPanel() {
                         const Text('分钟回复一次', style: TextStyle(color: Colors.white54, fontSize: 12)),
                       ]),
                     ],
+                    const SizedBox(height: 24),
+                    const Text('聊天背景', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickBackground,
+                          child: Container(
+                            height: 60,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: const Color(0xFF252540),
+                              image: _backgroundPath != null && File(_backgroundPath!).existsSync()
+                                ? DecorationImage(image: FileImage(File(_backgroundPath!)), fit: BoxFit.cover)
+                                : null,
+                            ),
+                            child: _backgroundPath == null || !File(_backgroundPath!).existsSync()
+                              ? const Center(child: Icon(Icons.add_photo_alternate_outlined, color: Colors.white38, size: 28))
+                              : null,
+                          ),
+                        ),
+                      ),
+                      if (_backgroundPath != null && File(_backgroundPath!).existsSync()) ...[
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _clearBackground,
+                          child: Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.close, color: Colors.redAccent, size: 18),
+                          ),
+                        ),
+                      ],
+                    ]),
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: _saveSettings,

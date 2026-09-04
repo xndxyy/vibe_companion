@@ -53,17 +53,36 @@ class StorageService {
   String getCharacterId() => prefs.getString(_keyCharacterId) ?? '';
   Future<void> setCharacterId(String v) async => await prefs.setString(_keyCharacterId, v);
 
-  // Conversation
-  String getConversationName() => prefs.getString(_keyConversationName) ?? '我的对话';
-  Future<void> setConversationName(String v) async => await prefs.setString(_keyConversationName, v);
-  String getCompanionName() => prefs.getString(_keyCompanionName) ?? '小雨';
-  Future<void> setCompanionName(String v) async => await prefs.setString(_keyCompanionName, v);
-  String getPersonality() => prefs.getString(_keyPersonality) ?? '';
-  Future<void> setPersonality(String v) async => await prefs.setString(_keyPersonality, v);
+  // Conversation (per character)
+  String getConversationName([String? charId]) {
+    final key = charId != null ? '${_keyConversationName}_$charId' : _keyConversationName;
+    return prefs.getString(key) ?? '我的对话';
+  }
+  Future<void> setConversationName(String v, [String? charId]) async {
+    final key = charId != null ? '${_keyConversationName}_$charId' : _keyConversationName;
+    await prefs.setString(key, v);
+  }
+  String getCompanionName([String? charId]) {
+    final key = charId != null ? '${_keyCompanionName}_$charId' : _keyCompanionName;
+    return prefs.getString(key) ?? '';
+  }
+  Future<void> setCompanionName(String v, [String? charId]) async {
+    final key = charId != null ? '${_keyCompanionName}_$charId' : _keyCompanionName;
+    await prefs.setString(key, v);
+  }
+  String getPersonality([String? charId]) {
+    final key = charId != null ? '${_keyPersonality}_$charId' : _keyPersonality;
+    return prefs.getString(key) ?? '';
+  }
+  Future<void> setPersonality(String v, [String? charId]) async {
+    final key = charId != null ? '${_keyPersonality}_$charId' : _keyPersonality;
+    await prefs.setString(key, v);
+  }
 
-  // Chat history
-  List<Map<String, dynamic>> getChatHistory() {
-    final json = prefs.getString(_keyChatHistory) ?? '[]';
+  // Chat history (per character)
+  List<Map<String, dynamic>> getChatHistory([String? charId]) {
+    final key = charId != null ? '${_keyChatHistory}_$charId' : _keyChatHistory;
+    final json = prefs.getString(key) ?? '[]';
     try {
       final List<dynamic> list = jsonDecode(json);
       return list.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -72,11 +91,15 @@ class StorageService {
     }
   }
 
-  Future<void> setChatHistory(List<Map<String, dynamic>> messages) async {
-    await prefs.setString(_keyChatHistory, jsonEncode(messages));
+  Future<void> setChatHistory(List<Map<String, dynamic>> messages, [String? charId]) async {
+    final key = charId != null ? '${_keyChatHistory}_$charId' : _keyChatHistory;
+    await prefs.setString(key, jsonEncode(messages));
   }
 
-  Future<void> clearChatHistory() async => await prefs.remove(_keyChatHistory);
+  Future<void> clearChatHistory([String? charId]) async {
+    final key = charId != null ? '${_keyChatHistory}_$charId' : _keyChatHistory;
+    await prefs.remove(key);
+  }
 
   // Avatars
   String? getUserAvatar() => prefs.getString(_keyUserAvatar);
@@ -88,21 +111,29 @@ class StorageService {
     }
   }
 
-  String? getCompanionAvatar() => prefs.getString(_keyCompanionAvatar);
-  Future<void> setCompanionAvatar(String? v) async {
+  String? getCompanionAvatar([String? charId]) {
+    final key = charId != null ? '${_keyCompanionAvatar}_$charId' : _keyCompanionAvatar;
+    return prefs.getString(key);
+  }
+  Future<void> setCompanionAvatar(String? v, [String? charId]) async {
+    final key = charId != null ? '${_keyCompanionAvatar}_$charId' : _keyCompanionAvatar;
     if (v != null) {
-      await prefs.setString(_keyCompanionAvatar, v);
+      await prefs.setString(key, v);
     } else {
-      await prefs.remove(_keyCompanionAvatar);
+      await prefs.remove(key);
     }
   }
 
-  String? getBackground() => prefs.getString(_keyBackground);
-  Future<void> setBackground(String? v) async {
+  String? getBackground([String? charId]) {
+    final key = charId != null ? '${_keyBackground}_$charId' : _keyBackground;
+    return prefs.getString(key);
+  }
+  Future<void> setBackground(String? v, [String? charId]) async {
+    final key = charId != null ? '${_keyBackground}_$charId' : _keyBackground;
     if (v != null) {
-      await prefs.setString(_keyBackground, v);
+      await prefs.setString(key, v);
     } else {
-      await prefs.remove(_keyBackground);
+      await prefs.remove(key);
     }
   }
 
@@ -130,15 +161,26 @@ class StorageService {
   Future<void> setHiddenCharIds(List<String> ids) async =>
       await prefs.setString(_keyHiddenCharIds, jsonEncode(ids));
 
+  // Custom characters
+  static const String _keyCustomChars = 'custom_characters';
+  List<Map<String, dynamic>> getCustomCharacters() {
+    final json = prefs.getString(_keyCustomChars) ?? '[]';
+    try {
+      return List<Map<String, dynamic>>.from(
+        (jsonDecode(json) as List).map((e) => Map<String, dynamic>.from(e)),
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+  Future<void> setCustomCharacters(List<Map<String, dynamic>> chars) async =>
+      await prefs.setString(_keyCustomChars, jsonEncode(chars));
+
   // One-click reset
   Future<void> resetAll() async {
-    final keys = [
-      _keyApi, _keyApiProvider, _keyCharacterId, _keyConversationName,
-      _keyCompanionName, _keyPersonality, _keyChatHistory, _keyUserAvatar,
-      _keyCompanionAvatar, _keyBackground, _keyAutoReplyEnabled,
-      _keyAutoReplyMinutes, _keyCustomApiUrl, _keyCustomModel, _keyHiddenCharIds,
-    ];
-    for (final key in keys) {
+    // Remove all keys including per-character keys
+    final allKeys = prefs.getKeys().toList();
+    for (final key in allKeys) {
       await prefs.remove(key);
     }
   }

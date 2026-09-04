@@ -1,6 +1,6 @@
 {
-    "name": "vibe_companion",
-    "short_name": "vibe_companion",
+    "name": "AiCompanion",
+    "short_name": "AiCompanion",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

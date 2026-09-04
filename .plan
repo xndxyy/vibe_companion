@@ -1,0 +1,42 @@
+# 实施方案
+
+## 核心改动
+
+### 1. StorageService — 每个角色独立存储聊天记录和设置
+当前：所有角色共用一个 `chat_history`、`companion_name`、`personality`、`companion_avatar_path`、`background_path`
+改为：用 `chat_history_{characterId}`、`companion_name_{characterId}` 等按角色 ID 隔离
+
+新增/修改方法：
+- `getChatHistory(String charId)` / `setChatHistory(String charId, ...)`
+- `getCompanionName(String charId)` / `setCompanionName(String charId, ...)`
+- `getPersonality(String charId)` / `setPersonality(String charId, ...)`
+- `getCompanionAvatar(String charId)` / `setCompanionAvatar(String charId, ...)`
+- `getBackground(String charId)` / `setBackground(String charId, ...)`
+- 保留旧的无参方法做一次性迁移（首次启动时把旧数据迁移到当前角色下）
+
+### 2. SplashScreen — 性别记忆，跳过选择
+`initState` 中检查 `getUserGender()`：
+- 如果已选过（!= -1），且有已保存的 characterId，直接跳转 ChatScreen
+- 如果已选过但没有 characterId，跳转 SetupScreen
+- 如果未选过，显示性别选择
+
+### 3. ChatScreen — 继续上次对话 + 退出切换人物
+- `_loadData()` 改为用 `_storage.getChatHistory(widget.characterId)` 加载该角色的独立记录
+- `_saveSettings()` / `setChatHistory()` 都带上 characterId
+- AppBar 的返回按钮改为"切换人物"，跳转 SetupScreen
+- 聊天背景按角色独立存储和加载
+
+### 4. 聊天背景修改 — 在设置面板中添加
+在 `_buildSettingsPanel()` 的设置列表中添加"聊天背景"选项：
+- 点击可从相册选择图片
+- 保存到 `background_{characterId}`
+- 提供"恢复默认"按钮清除自定义背景
+
+### 5. 高级设置 — 自定义人物对话入口
+在 SetupScreen 的 `_buildAdvanced()` 中添加"自定义人物对话"卡片：
+- 展示所有角色列表，每个角色显示聊天记录条数
+- 点击角色可直接进入该角色的对话
+
+## 修改文件
+1. `lib/services/storage_service.dart` — 按角色隔离存储
+2. `lib/main.dart` — SplashScreen 跳过逻辑 + ChatScreen 独立记录 + 设置面板加背景 + 高级设置入口
